@@ -1,0 +1,78 @@
+name: Go Build and Test
+
+on:
+  pull_request: {}
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  go-test:
+    name: Go / ${{ matrix.os }} / ${{ matrix.go-version }}
+    runs-on: ${{ matrix.image }}
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        os: [Ubuntu, macOS]
+        go-version: ["1.21"]
+        include:
+          - os: Ubuntu
+            image: ubuntu-latest
+          - os: macOS
+            image: macos-latest
+      fail-fast: false
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -v -race ./...
+
+      - name: Vet
+        run: go vet ./...
+
+  go-release-dry-run:
+    name: Release dry-run (cross-compile)
+    runs-on: ubuntu-latest
+    needs: go-test
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Cross-compile for Linux (amd64 / arm64)
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o /tmp/ansible-aisnippet-linux-amd64 ./cmd/ansible-aisnippet/
+          GOOS=linux GOARCH=arm64 go build -o /tmp/ansible-aisnippet-linux-arm64 ./cmd/ansible-aisnippet/
+
+      - name: Cross-compile for macOS (amd64 / arm64)
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -o /tmp/ansible-aisnippet-darwin-amd64 ./cmd/ansible-aisnippet/
+          GOOS=darwin GOARCH=arm64 go build -o /tmp/ansible-aisnippet-darwin-arm64 ./cmd/ansible-aisnippet/
+
+      - name: Cross-compile for Windows (amd64)
+        run: |
+          GOOS=windows GOARCH=amd64 go build -o /tmp/ansible-aisnippet-windows-amd64.exe ./cmd/ansible-aisnippet/
