@@ -173,39 +173,188 @@ export OPENAI_KEY=sk-...
 
 For more control, pass a YAML configuration file with `--config`:
 
+```bash
+ansible-aisnippet --config config.yml generate "install nginx"
+```
+
+A ready-to-use starter template is provided at [`config.example.yml`](config.example.yml).
+
+#### Complete configuration reference
+
+The table below lists every supported field. All fields are optional and fall back to
+sensible defaults when omitted.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `provider` | string | `openai` | Primary AI provider |
+| `fallback_providers` | list | `[]` | Backup providers tried in order when the primary fails |
+| `cache.enabled` | bool | `true` | Enable response caching |
+| `cache.ttl` | int | `3600` | Cache time-to-live in seconds |
+| `cache.max_size` | int | `100` | Maximum number of cached responses |
+| `rate_limit.enabled` | bool | `true` | Enable request rate limiter |
+| `rate_limit.requests_per_minute` | int | `60` | Max requests per minute |
+| `providers.<name>.api_key` | string | _(env var)_ | Provider API key; falls back to the provider-specific env variable |
+| `providers.<name>.model` | string | _(provider default)_ | Model identifier |
+| `providers.<name>.base_url` | string | _(provider default)_ | Custom API endpoint (required for Azure, optional for self-hosted) |
+| `providers.<name>.temperature` | float | `0.0` | Response randomness (`0.0` = deterministic) |
+| `providers.<name>.max_retries` | int | `3` | Retry attempts on failure |
+| `providers.<name>.timeout` | int | `30` | Request timeout in seconds |
+| `providers.<name>.extra` | map | `{}` | Provider-specific extra fields (e.g. `api_version` for Azure) |
+
+#### Minimal example (single provider)
+
 ```yaml
 # config.yml
 provider: openai
-fallback_providers:
-  - anthropic
-  - ollama
-
-cache:
-  enabled: true
-  ttl: 3600
-  max_size: 100
-
-rate_limit:
-  enabled: true
-  requests_per_minute: 60
 
 providers:
   openai:
     api_key: sk-...
     model: gpt-4o
+```
+
+#### Full example (all 12 providers)
+
+```yaml
+# config.yml — complete example showing every provider and field.
+# Only configure the providers you intend to use; omit the rest.
+
+# ── Global ────────────────────────────────────────────────────────────────────
+provider: openai                     # Primary provider (default: openai)
+fallback_providers:                  # Tried in order when the primary fails
+  - anthropic
+  - ollama
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+cache:
+  enabled: true                      # Enable response cache (default: true)
+  ttl: 3600                          # Seconds to keep cached responses (default: 3600)
+  max_size: 100                      # Max number of cached items (default: 100)
+
+# ── Rate limiter ──────────────────────────────────────────────────────────────
+rate_limit:
+  enabled: true                      # Enable rate limiter (default: true)
+  requests_per_minute: 60            # Max requests per minute (default: 60)
+
+# ── Per-provider settings ─────────────────────────────────────────────────────
+providers:
+
+  # OpenAI — https://platform.openai.com/
+  # API key env: OPENAI_KEY or OPENAI_API_KEY
+  openai:
+    api_key: sk-...
+    model: gpt-4o                    # Default: gpt-3.5-turbo
+    temperature: 0.0                 # Default: 0.0 (deterministic)
+    max_retries: 3                   # Default: 3
+    timeout: 30                      # Default: 30 seconds
+
+  # Anthropic — https://www.anthropic.com/
+  # API key env: ANTHROPIC_API_KEY
+  anthropic:
+    api_key: sk-ant-...
+    model: claude-3-haiku-20240307   # Default: claude-3-haiku-20240307
+    temperature: 0.0
+    max_retries: 3
+    timeout: 60
+
+  # Google Gemini — https://ai.google.dev/
+  # API key env: GOOGLE_API_KEY
+  google:
+    api_key: AIza...
+    model: gemini-pro                # Default: gemini-pro
     temperature: 0.0
     max_retries: 3
     timeout: 30
-  anthropic:
-    api_key: sk-ant-...
-    model: claude-3-haiku-20240307
-  ollama:
-    base_url: http://localhost:11434
-    model: llama3
-```
 
-```bash
-ansible-aisnippet --config config.yml generate "install nginx"
+  # Azure OpenAI Service — https://azure.microsoft.com/en-us/products/ai-services/openai-service
+  # API key env: AZURE_OPENAI_KEY
+  # Endpoint env: AZURE_OPENAI_ENDPOINT
+  # Deployment env: AZURE_OPENAI_DEPLOYMENT
+  azure:
+    api_key: your-azure-api-key
+    base_url: https://your-resource.openai.azure.com/
+    model: your-deployment-name      # Default: gpt-35-turbo
+    temperature: 0.0
+    max_retries: 3
+    timeout: 30
+    extra:
+      api_version: "2024-02-01"      # Azure API version (default: 2024-02-01)
+
+  # Mistral AI — https://mistral.ai/
+  # API key env: MISTRAL_API_KEY
+  mistral:
+    api_key: your-mistral-key
+    model: mistral-small             # Default: mistral-small
+    temperature: 0.0
+    max_retries: 3
+    timeout: 30
+
+  # Cohere — https://cohere.com/
+  # API key env: COHERE_API_KEY
+  cohere:
+    api_key: your-cohere-key
+    model: command                   # Default: command
+    temperature: 0.0
+    max_retries: 3
+    timeout: 30
+
+  # Ollama (local) — https://ollama.com/
+  # Base URL env: OLLAMA_BASE_URL
+  # Model env:    OLLAMA_MODEL
+  ollama:
+    base_url: http://localhost:11434  # Default: http://localhost:11434
+    model: llama3                     # Default: llama3
+    temperature: 0.0
+    max_retries: 3
+    timeout: 120                      # Longer timeout recommended for local inference
+
+  # LM Studio (local) — https://lmstudio.ai/
+  # Base URL env: LMSTUDIO_BASE_URL
+  # Model env:    LMSTUDIO_MODEL
+  lmstudio:
+    base_url: http://localhost:1234/v1  # Default: http://localhost:1234/v1
+    model: local-model                  # Default: local-model
+    temperature: 0.0
+    max_retries: 3
+    timeout: 120
+
+  # Meta Llama via Ollama-compatible endpoint (local)
+  # Base URL env: LLAMA_BASE_URL
+  # Model env:    LLAMA_MODEL
+  llama:
+    base_url: http://localhost:11434  # Default: http://localhost:11434
+    model: llama3                     # Default: llama3
+    temperature: 0.0
+    max_retries: 3
+    timeout: 120
+
+  # HuggingFace Inference API — https://huggingface.co/inference-api
+  # API token env: HF_API_TOKEN
+  # Model env:     HF_MODEL
+  huggingface:
+    api_key: hf_...
+    model: mistralai/Mistral-7B-Instruct-v0.2  # Default: mistralai/Mistral-7B-Instruct-v0.2
+    temperature: 0.1                            # HuggingFace requires temperature > 0
+    max_retries: 3
+    timeout: 60
+
+  # OpenRouter — https://openrouter.ai/
+  # API key env: OPENROUTER_API_KEY
+  openrouter:
+    api_key: sk-or-...
+    model: openai/gpt-3.5-turbo      # Default: openai/gpt-3.5-turbo
+    temperature: 0.0
+    max_retries: 3
+    timeout: 30
+
+  # ZenAI (OpenCode) — https://api.opencode.ai/
+  # API key env: ZEN_API_KEY
+  zen:
+    api_key: your-zen-key
+    model: zen                       # Default: zen
+    temperature: 0.0
+    max_retries: 3
+    timeout: 30
 ```
 
 ---
