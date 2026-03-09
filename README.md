@@ -4,10 +4,14 @@
 
 `ansible-aisnippet` is a command-line tool that converts natural-language descriptions into
 ready-to-use Ansible task YAML. It supports **multiple AI providers** (OpenAI, Anthropic,
-Google Gemini, Mistral, Cohere, Azure OpenAI, Ollama, LM Studio, Llama, and HuggingFace),
-a similarity-search cache powered by Gensim/Jieba to avoid redundant API calls, automatic
-retries with exponential back-off, and a configurable fallback chain so generation never
-silently fails.
+Google Gemini, Mistral, Cohere, Azure OpenAI, Ollama, LM Studio, Llama, HuggingFace,
+OpenRouter, and ZenAI), a similarity-search engine powered by a native TF-IDF implementation
+to match the best Ansible snippet template, automatic retries with fallback chaining, and a
+configurable response cache.
+
+The project ships a **Go CLI binary** (`cmd/ansible-aisnippet`) with no external runtime
+dependencies — just download and run. The original Python implementation remains in
+`ansible_aisnippet/` for reference.
 
 ---
 
@@ -16,6 +20,8 @@ silently fails.
 - [Features](#features)
 - [Technologies & Frameworks](#technologies--frameworks)
 - [Installation](#installation)
+  - [Go CLI (recommended)](#go-cli-recommended)
+  - [Python CLI](#python-cli)
 - [Configuration](#configuration)
   - [Environment Variables](#environment-variables)
   - [Configuration File](#configuration-file)
@@ -26,6 +32,7 @@ silently fails.
   - [Generate a Full Playbook](#generate-a-full-playbook)
   - [List Available Providers](#list-available-providers)
   - [Save Output to a File](#save-output-to-a-file)
+- [Go Architecture](#go-architecture)
 - [Contributing](#contributing)
 - [Roadmap](#roadmap)
 - [License](#license)
@@ -36,79 +43,83 @@ silently fails.
 ## Features
 
 - 🤖 **Multi-provider AI support** — OpenAI, Anthropic Claude, Google Gemini, Mistral,
-  Cohere, Azure OpenAI, Ollama (local), LM Studio (local), Llama, and HuggingFace.
+  Cohere, Azure OpenAI, Ollama (local), LM Studio (local), Llama, HuggingFace,
+  OpenRouter, and ZenAI.
 - 📝 **Single-task generation** — describe a task in plain English and get valid Ansible YAML.
 - 📋 **Batch generation from a YAML file** — generate many tasks (including blocks, rescue
   sections, and `register` directives) in one command.
 - 📦 **Full playbook generation** — wrap generated tasks in a complete playbook skeleton.
 - 💾 **Response caching** — avoid redundant API calls; configurable TTL and cache size.
-- 🔁 **Automatic retries & fallback** — configurable retry count with exponential back-off
-  and a fallback provider chain.
+- 🔁 **Automatic fallback** — configurable provider chain so generation never silently fails.
 - ⚙️ **Flexible configuration** — environment variables or a YAML config file.
 - 🐚 **Shell completion** — built-in tab completion for Bash, Zsh, and Fish.
+- ⚡ **Single static binary** — the Go CLI ships as a single compiled binary with no runtime
+  dependencies.
 
 ---
 
 ## Technologies & Frameworks
 
+### Go CLI (current)
+
+| Category | Technology |
+|---|---|
+| Language | Go ≥ 1.21 |
+| CLI framework | [Cobra](https://github.com/spf13/cobra) |
+| YAML parsing | [gopkg.in/yaml.v3](https://gopkg.in/yaml.v3) |
+| NLP / similarity | Native TF-IDF + Cosine Similarity (no external libraries) |
+| HTTP client | Go standard library `net/http` |
+| Testing | Go standard library `testing` |
+| CI/CD | GitHub Actions |
+
+### Python CLI (reference)
+
 | Category | Technology |
 |---|---|
 | Language | Python ≥ 3.10 |
 | CLI framework | [Typer](https://typer.tiangolo.com/) + [Rich](https://rich.readthedocs.io/) |
-| AI / LLM SDKs | `openai`, `anthropic`, `google-generativeai`, `mistralai`, `cohere` |
 | NLP / similarity | [Gensim](https://radimrehurek.com/gensim/) + [Jieba](https://github.com/fxsjy/jieba) |
 | YAML parsing | [ruamel.yaml](https://yaml.readthedocs.io/en/latest/) |
-| Templating | [Jinja2](https://jinja.palletsprojects.com/) |
 | Package manager | [Poetry](https://python-poetry.org/) |
-| Testing | [pytest](https://pytest.org/) |
-| CI/CD | GitHub Actions |
 
 ---
 
 ## Installation
 
-### Using pip (recommended)
+### Go CLI (recommended)
 
-```bash
-pip install ansible-aisnippet
-```
-
-### Using pipx (isolated environment)
-
-```bash
-pipx install ansible-aisnippet
-```
-
-### From source (development)
+#### Build from source
 
 ```bash
 git clone https://github.com/marcuscabrera/ansible-aisnippet.git
 cd ansible-aisnippet
-pip install poetry
-poetry install
+go build -o ansible-aisnippet ./cmd/ansible-aisnippet/
+./ansible-aisnippet --help
 ```
 
-### Dependencies
+Requires Go 1.21 or later. No other dependencies needed.
 
-All runtime dependencies are managed by Poetry and installed automatically. The key ones are:
-
-- `python ^3.10`
-- `typer[all] ^0.7`
-- `Jinja2 ^3.1`
-- `ruamel.yaml ^0.17`
-- `rich ^12.6`
-- `gensim ^4.3`
-- `jieba ^0.42`
-- `openai >=0.27`
-- `requests ^2.28`
-
-Optional provider SDKs (install as needed):
+#### Cross-compile for your platform
 
 ```bash
-pip install anthropic              # Anthropic Claude
-pip install google-generativeai    # Google Gemini
-pip install mistralai              # Mistral AI
-pip install cohere                 # Cohere
+# Linux (amd64)
+GOOS=linux GOARCH=amd64 go build -o ansible-aisnippet-linux-amd64 ./cmd/ansible-aisnippet/
+
+# macOS (Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o ansible-aisnippet-darwin-arm64 ./cmd/ansible-aisnippet/
+
+# Windows
+GOOS=windows GOARCH=amd64 go build -o ansible-aisnippet.exe ./cmd/ansible-aisnippet/
+```
+
+### Python CLI
+
+```bash
+pip install ansible-aisnippet
+# or with pipx
+pipx install ansible-aisnippet
+# or from source
+pip install poetry && poetry install
 ```
 
 ---
@@ -133,14 +144,18 @@ Provider API keys are read from standard provider-specific variables:
 
 | Provider | Environment Variable |
 |---|---|
-| OpenAI | `OPENAI_KEY` |
+| OpenAI | `OPENAI_KEY` or `OPENAI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 | Google Gemini | `GOOGLE_API_KEY` |
+| Azure OpenAI | `AZURE_OPENAI_KEY` + `AZURE_OPENAI_ENDPOINT` |
 | Mistral | `MISTRAL_API_KEY` |
 | Cohere | `COHERE_API_KEY` |
-| Azure OpenAI | `AZURE_OPENAI_API_KEY` |
-| HuggingFace | `HUGGINGFACE_API_KEY` |
+| HuggingFace | `HF_API_TOKEN` |
 | OpenRouter | `OPENROUTER_API_KEY` |
+| ZenAI | `ZEN_API_KEY` |
+| Ollama | `OLLAMA_BASE_URL` (default: `http://localhost:11434`) |
+| LM Studio | `LMSTUDIO_BASE_URL` (default: `http://localhost:1234/v1`) |
+| Llama | `LLAMA_BASE_URL` (default: `http://localhost:11434`) |
 
 ```bash
 # Example: use OpenAI
@@ -202,23 +217,21 @@ ansible-aisnippet --config config.yml generate "install nginx"
 ```
 ansible-aisnippet --help
 
- Usage: ansible-aisnippet [OPTIONS] COMMAND [ARGS]...
+ansible-aisnippet converts natural-language task descriptions into
+Ansible tasks and playbooks by querying AI language models.
 
-╭─ Options ─────────────────────────────────────────────────────╮
-│ --version             -v        Show the application's        │
-│                                 version and exit.             │
-│ --install-completion            Install completion for the    │
-│                                 current shell.                │
-│ --show-completion               Show completion for the       │
-│                                 current shell, to copy it or  │
-│                                 customize the installation.   │
-│ --help                          Show this message and exit.   │
-╰───────────────────────────────────────────────────────────────╯
-╭─ Commands ────────────────────────────────────────────────────╮
-│ generate        Ask an AI provider to write an Ansible task   │
-│                 using a template                              │
-│ list-providers  List all available AI providers               │
-╰───────────────────────────────────────────────────────────────╯
+Usage:
+  ansible-aisnippet [command]
+
+Available Commands:
+  completion     Generate the autocompletion script for the specified shell
+  generate       Generate an Ansible task or playbook from a description
+  help           Help about any command
+  list-providers List all available AI providers
+
+Flags:
+  -h, --help      help for ansible-aisnippet
+  -v, --version   version for ansible-aisnippet
 ```
 
 ### Generate a Single Task
@@ -227,18 +240,7 @@ ansible-aisnippet --help
 export AI_PROVIDER=openai
 export OPENAI_KEY=sk-...
 
-ansible-aisnippet generate "execute command to start /opt/application/start.sh create /var/run/test.lock"
-```
-
-Example output:
-
-```yaml
-name: Execute command to start /opt/application/start.sh create /var/run/test.lock
-ansible.builtin.command:
-  chdir: /opt/application
-  cmd: ./start.sh && touch /var/run/test.lock
-  creates: /var/run/test.lock
-  removes: ''
+ansible-aisnippet generate "execute command to start /opt/application/start.sh"
 ```
 
 You can also select a provider directly on the command line:
@@ -279,61 +281,28 @@ Add the `--playbook` / `-p` flag to wrap all tasks in a complete playbook:
 ansible-aisnippet generate -f tasks.yml -p
 ```
 
-Example output:
-
-```yaml
-- name: Playbook generated with AI
-  hosts: all
-  gather_facts: true
-  tasks:
-  - name: Install package htop, nginx and net-tools
-    ansible.builtin.yum:
-      name:
-      - htop
-      - nginx
-      - net-tools
-      state: present
-  - name: Copy file from local file /tmp/toto to remote /tmp/titi
-    ansible.builtin.copy:
-      src: /tmp/toto
-      dest: /tmp/titi
-      mode: '0666'
-      owner: bob
-      group: www
-    register: test
-  - name: A block
-    when: test.rc == 0
-    block:
-    - name: Wait for port 6300 on localhost timeout 25
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: '6300'
-        timeout: '25'
-    rescue:
-    - name: Execute command /opt/application/start.sh creates /var/run/test.lock
-      ansible.builtin.command:
-        chdir: /tmp/test
-        cmd: /opt/application/start.sh
-        creates: /var/run/test.lock
-  - name: Download file from https://tmp.io/test/
-    ansible.builtin.get_url:
-      backup: false
-      decompress: true
-      dest: /tmp/test
-      force: true
-      group: root
-      mode: '0640'
-      owner: root
-      timeout: '10'
-      tmp_dest: /tmp/test
-      url: https://tmp.io/test/
-      validate_certs: true
-```
-
 ### List Available Providers
 
 ```bash
 ansible-aisnippet list-providers
+```
+
+Output:
+
+```
+Available AI providers:
+  • anthropic
+  • azure
+  • cohere
+  • google
+  • huggingface
+  • llama
+  • lmstudio
+  • mistral
+  • ollama
+  • openai
+  • openrouter
+  • zen
 ```
 
 ### Save Output to a File
@@ -344,79 +313,111 @@ ansible-aisnippet generate -f tasks.yml -p -o playbook.yml
 
 ---
 
+## Go Architecture
+
+The Go implementation follows the [Go Standard Layout](https://github.com/golang-standards/project-layout):
+
+```
+ansible-aisnippet/
+├── cmd/
+│   └── ansible-aisnippet/
+│       └── main.go                 # Entry point
+├── internal/
+│   ├── cli/                        # Cobra CLI commands (root, generate, list-providers)
+│   ├── config/                     # Configuration loading from env/YAML
+│   ├── core/                       # Main coordinator (similarity + provider + cache)
+│   │   └── data/
+│   │       └── snippets.json       # Embedded Ansible snippet templates
+│   ├── providers/                  # Provider interface + all 12 implementations
+│   │   ├── provider.go             # Provider interface (Strategy Pattern)
+│   │   ├── factory.go              # ProviderFactory with registry
+│   │   ├── fallback.go             # FallbackManager
+│   │   ├── openai.go
+│   │   ├── anthropic.go
+│   │   ├── google.go
+│   │   ├── azure.go
+│   │   ├── mistral.go
+│   │   ├── cohere.go
+│   │   ├── ollama.go
+│   │   ├── lmstudio.go
+│   │   ├── llama.go
+│   │   ├── huggingface.go
+│   │   ├── openrouter.go
+│   │   └── zen.go
+│   ├── similarity/                 # Native TF-IDF engine (replaces Gensim/Jieba)
+│   ├── cache/                      # In-memory response cache with TTL/LRU eviction
+│   └── ratelimit/                  # Sliding-window rate limiter
+├── go.mod
+├── go.sum
+└── README.md
+```
+
+### Key Design Decisions
+
+- **Strategy + Factory Pattern** — `Provider` interface with `ProviderFactory` registry allows
+  adding new providers without touching existing code.
+- **Native TF-IDF** — A pure-Go Bag-of-Words / Cosine Similarity engine replaces the heavy
+  Gensim + Jieba Python dependencies. It is sufficient for the small English-language
+  `snippets.json` corpus.
+- **Direct HTTP calls** — All provider implementations use the standard `net/http` package
+  instead of per-provider SDKs, keeping the dependency list minimal.
+- **Embedded snippets** — `snippets.json` is embedded into the binary at compile time via
+  `//go:embed`, producing a single self-contained executable.
+
+---
+
 ## Contributing
 
 Contributions of all kinds are welcome — bug reports, feature requests, documentation
 improvements, and code changes.
 
-### Getting Started
+### Getting Started (Go)
 
 1. **Fork** the repository and clone your fork.
 2. Create a new branch from `main`:
    ```bash
    git checkout -b feat/my-feature
    ```
-3. Install development dependencies:
+3. Build and test:
    ```bash
-   pip install poetry
-   poetry install
-   ```
-4. Make your changes, add tests, and verify everything passes:
-   ```bash
-   poetry run pytest
+   go build ./...
+   go test ./...
+   go vet ./...
    ```
 
-### Code Style
+### Adding a New AI Provider (Go)
 
-- Follow [PEP 8](https://pep8.org/) for Python style.
-- Format code with [Black](https://black.readthedocs.io/) before committing:
-  ```bash
-  poetry run black ansible_aisnippet tests
-  ```
-- Keep lines ≤ 88 characters (Black default).
-- Add docstrings to all public classes and methods.
-- Use type hints throughout.
+1. Create `internal/providers/<name>.go` implementing the `Provider` interface.
+2. Register the constructor in the `init()` function in `internal/providers/factory.go`.
+3. Add tests to `internal/providers/providers_test.go`.
 
-### Adding a New AI Provider
+### Getting Started (Python)
 
-1. Create `ansible_aisnippet/providers/<name>_provider.py` implementing `BaseProvider`.
-2. Register the provider in `ansible_aisnippet/providers/factory.py`.
-3. Add the provider name to the `--provider` help text in `main.py`.
-4. Add a test in `tests/test_providers.py`.
+```bash
+pip install poetry
+poetry install
+poetry run pytest
+```
 
 ### Pull Request Process
 
-1. Ensure all existing tests pass and new code has adequate test coverage.
-2. Update the `README.md` and `changelog.md` if your change affects user-facing behaviour.
-3. Open a pull request against `main` with a clear description of the problem and
-   the solution, referencing any related issues.
-4. Address any review comments promptly.
-
-### Reporting Bugs
-
-Please open a [GitHub Issue](https://github.com/marcuscabrera/ansible-aisnippet/issues)
-with steps to reproduce, expected behaviour, actual behaviour, and your environment
-details (OS, Python version, `ansible-aisnippet` version).
+1. Ensure all tests pass and new code has adequate coverage.
+2. Update `README.md` and `changelog.md` if your change is user-facing.
+3. Open a pull request against `main` with a clear description.
 
 ---
 
 ## Roadmap
 
-The following features and improvements are planned for upcoming releases:
+- **v0.2** — Go CLI with all 12 providers, native TF-IDF, single binary distribution.
+- **v0.3** — GoReleaser integration for automatic multi-architecture releases (Linux, macOS
+  ARM/Intel, Windows) on every tagged release.
+- **v0.4** — Interactive mode; Ansible role scaffolding.
+- **v0.5** — Plugin support for custom Ansible collections.
 
-- **v0.2** — Extended provider support (OpenRouter, ZenAI), improved prompt engineering
-  per provider, and full test coverage for all providers.
-- **v0.3** — Interactive mode that lets users review and refine generated tasks before
-  saving; richer verbose output showing token usage.
-- **v0.4** — Ansible role scaffolding — generate a complete role directory structure
-  (tasks, handlers, defaults, meta) from a description.
-- **v0.5** — Plugin support for custom Ansible collections; export to AWX/AAP Job
-  Templates.
-- **Ongoing** — Performance improvements to the similarity-search cache, documentation
-  translations, and community-contributed provider adapters.
-
-See [MULTI_PROVIDER_ARCHITECTURE.md](MULTI_PROVIDER_ARCHITECTURE.md) for the detailed
-technical roadmap and design rationale.
+See [GO_REWRITE_PLAN.md](GO_REWRITE_PLAN.md) for the detailed technical roadmap and
+[MULTI_PROVIDER_ARCHITECTURE.md](MULTI_PROVIDER_ARCHITECTURE.md) for the multi-provider
+design rationale.
 
 ---
 
@@ -424,22 +425,6 @@ technical roadmap and design rationale.
 
 This project is distributed under the **Apache License 2.0**.
 See the [LICENSE](LICENSE) file for the full text.
-
-```
-Copyright 2024 ansible-aisnippet contributors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-```
 
 ---
 
@@ -449,5 +434,3 @@ limitations under the License.
 |---|---|
 | 🐛 Bug reports & feature requests | [GitHub Issues](https://github.com/marcuscabrera/ansible-aisnippet/issues) |
 | 💬 General questions & discussions | [GitHub Discussions](https://github.com/marcuscabrera/ansible-aisnippet/discussions) |
-| 📖 Author's blog | [blog.stephane-robert.info](https://blog.stephane-robert.info/) |
-| 📧 Author e-mail | robert.stephane.28@gmail.com |
