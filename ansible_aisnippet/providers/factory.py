@@ -32,6 +32,8 @@ def _lazy_register_all() -> None:
     from .mistral_provider import MistralProvider
     from .ollama_provider import OllamaProvider
     from .openai_provider import OpenAIProvider
+    from .openrouter_provider import OpenRouterProvider
+    from .zen_provider import ZenProvider
 
     for cls in [
         OpenAIProvider,
@@ -44,6 +46,8 @@ def _lazy_register_all() -> None:
         LMStudioProvider,
         MetaLlamaProvider,
         HuggingFaceProvider,
+        OpenRouterProvider,
+        ZenProvider,
     ]:
         _register(cls)
 
@@ -69,7 +73,7 @@ class ProviderFactory:
             provider_name: One of the supported provider identifiers
                 (``openai``, ``anthropic``, ``google``, ``azure``,
                 ``mistral``, ``cohere``, ``ollama``, ``lmstudio``,
-                ``llama``, ``huggingface``).
+                ``llama``, ``huggingface``, ``openrouter``, ``zen``).
             config: A :class:`~ansible_aisnippet.config.ProviderConfig`
                 containing API key, model, and other settings.
 

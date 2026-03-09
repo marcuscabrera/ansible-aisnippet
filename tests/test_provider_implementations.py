@@ -275,3 +275,173 @@ class TestHuggingFaceProvider:
             result = provider.generate("sys", "user")
 
         assert result == "hf response"
+
+
+class TestOpenRouterProvider:
+    def test_api_key_from_config(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        cfg = ProviderConfig(api_key="sk-or-key")
+        provider = OpenRouterProvider(cfg)
+        assert provider.api_key == "sk-or-key"
+
+    def test_api_key_from_env(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "env-or-key"}):
+            provider = OpenRouterProvider(ProviderConfig())
+        assert provider.api_key == "env-or-key"
+
+    def test_default_base_url(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        with patch.dict(os.environ, {}, clear=True):
+            provider = OpenRouterProvider(ProviderConfig())
+        assert provider.base_url == OpenRouterProvider.DEFAULT_BASE_URL
+
+    def test_base_url_from_env(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        with patch.dict(os.environ, {"OPENROUTER_BASE_URL": "https://custom.openrouter.ai/v1"}):
+            provider = OpenRouterProvider(ProviderConfig())
+        assert provider.base_url == "https://custom.openrouter.ai/v1"
+
+    def test_default_model(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        with patch.dict(os.environ, {}, clear=True):
+            provider = OpenRouterProvider(ProviderConfig())
+        assert provider.model == OpenRouterProvider.DEFAULT_MODEL
+
+    def test_model_from_config(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        cfg = ProviderConfig(model="anthropic/claude-3-haiku")
+        provider = OpenRouterProvider(cfg)
+        assert provider.model == "anthropic/claude-3-haiku"
+
+    def test_validate_config_with_key(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        cfg = ProviderConfig(api_key="key")
+        assert OpenRouterProvider(cfg).validate_config() is True
+
+    def test_validate_config_without_key(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        with patch.dict(os.environ, {}, clear=True):
+            provider = OpenRouterProvider(ProviderConfig())
+        assert provider.validate_config() is False
+
+    def test_generate_calls_api(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "openrouter response"}}]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        cfg = ProviderConfig(api_key="key")
+        provider = OpenRouterProvider(cfg)
+
+        with patch("ansible_aisnippet.providers.openrouter_provider.requests.post") as mock_post:
+            mock_post.return_value = mock_response
+            result = provider.generate("sys", "user")
+
+        assert result == "openrouter response"
+        mock_post.assert_called_once()
+
+    def test_generate_sends_auth_header(self):
+        from ansible_aisnippet.providers.openrouter_provider import OpenRouterProvider
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        cfg = ProviderConfig(api_key="my-or-key")
+        provider = OpenRouterProvider(cfg)
+
+        with patch("ansible_aisnippet.providers.openrouter_provider.requests.post") as mock_post:
+            mock_post.return_value = mock_response
+            provider.generate("sys", "user")
+
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["Authorization"] == "Bearer my-or-key"
+
+
+class TestZenProvider:
+    def test_api_key_from_config(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        cfg = ProviderConfig(api_key="zen-key")
+        provider = ZenProvider(cfg)
+        assert provider.api_key == "zen-key"
+
+    def test_api_key_from_env(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        with patch.dict(os.environ, {"ZEN_API_KEY": "env-zen-key"}):
+            provider = ZenProvider(ProviderConfig())
+        assert provider.api_key == "env-zen-key"
+
+    def test_default_base_url(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        with patch.dict(os.environ, {}, clear=True):
+            provider = ZenProvider(ProviderConfig())
+        assert provider.base_url == ZenProvider.DEFAULT_BASE_URL
+
+    def test_base_url_from_env(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        with patch.dict(os.environ, {"ZEN_BASE_URL": "http://localhost:8080/v1"}):
+            provider = ZenProvider(ProviderConfig())
+        assert provider.base_url == "http://localhost:8080/v1"
+
+    def test_default_model(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        with patch.dict(os.environ, {}, clear=True):
+            provider = ZenProvider(ProviderConfig())
+        assert provider.model == ZenProvider.DEFAULT_MODEL
+
+    def test_model_from_config(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        cfg = ProviderConfig(model="zen-pro")
+        provider = ZenProvider(cfg)
+        assert provider.model == "zen-pro"
+
+    def test_validate_config_with_key(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        cfg = ProviderConfig(api_key="key")
+        assert ZenProvider(cfg).validate_config() is True
+
+    def test_validate_config_without_key(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        with patch.dict(os.environ, {}, clear=True):
+            provider = ZenProvider(ProviderConfig())
+        assert provider.validate_config() is False
+
+    def test_generate_calls_api(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "zen response"}}]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        cfg = ProviderConfig(api_key="key")
+        provider = ZenProvider(cfg)
+
+        with patch("ansible_aisnippet.providers.zen_provider.requests.post") as mock_post:
+            mock_post.return_value = mock_response
+            result = provider.generate("sys", "user")
+
+        assert result == "zen response"
+        mock_post.assert_called_once()
+
+    def test_generate_sends_auth_header(self):
+        from ansible_aisnippet.providers.zen_provider import ZenProvider
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        cfg = ProviderConfig(api_key="my-zen-key")
+        provider = ZenProvider(cfg)
+
+        with patch("ansible_aisnippet.providers.zen_provider.requests.post") as mock_post:
+            mock_post.return_value = mock_response
+            provider.generate("sys", "user")
+
+        _, kwargs = mock_post.call_args
+        assert kwargs["headers"]["Authorization"] == "Bearer my-zen-key"

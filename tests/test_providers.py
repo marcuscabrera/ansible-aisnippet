@@ -41,6 +41,7 @@ class TestProviderFactory:
         expected = {
             "openai", "anthropic", "google", "azure", "mistral",
             "cohere", "ollama", "lmstudio", "llama", "huggingface",
+            "openrouter", "zen",
         }
         assert expected.issubset(set(providers))
 
@@ -93,6 +94,16 @@ class TestProviderFactory:
         cfg = ProviderConfig(api_key="hf-token")
         provider = ProviderFactory.create("huggingface", cfg)
         assert provider.name == "huggingface"
+
+    def test_create_openrouter_provider(self):
+        cfg = ProviderConfig(api_key="sk-or-key")
+        provider = ProviderFactory.create("openrouter", cfg)
+        assert provider.name == "openrouter"
+
+    def test_create_zen_provider(self):
+        cfg = ProviderConfig(api_key="zen-key")
+        provider = ProviderFactory.create("zen", cfg)
+        assert provider.name == "zen"
 
     def test_unknown_provider_raises_value_error(self):
         cfg = ProviderConfig()
